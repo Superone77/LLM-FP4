@@ -1,5 +1,4 @@
 import torch
-from habana_frameworks.torch import core as htcore
 
 
 def fp4_121_positive(x:torch.Tensor, stochastic_rounding:bool=False) -> torch.Tensor:
@@ -51,7 +50,6 @@ def fp4_121_scaled(x:torch.Tensor,
 
         scale_per_b = x_abs_scaled.max(dim=-1, keepdim=True)[0]
         down_cast = torch.ops.hpu.cast_to_fp8_v2(fp4_121_max / scale_per_b, 1.0, False, False, torch.float8_e4m3fn)[0]
-        htcore.mark_step()
         up_cast = down_cast.to(scale_per_b.dtype)
         scale_per_b = up_cast
         scale_per_b = torch.where((0 < scale_per_b) * (scale_per_b < torch.inf), scale_per_b, 1.0)
@@ -115,7 +113,6 @@ def fake_quant_fp4(x:torch.Tensor,
 
 
 if __name__ == '__main__':
-    import habana_frameworks.torch.core as htcore
 
     device = torch.device('hpu')
 
