@@ -4,6 +4,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
 import math
+from .fp4 import fake_quant_fp4
+import os
 
 class FPMinMaxQuantLinear(nn.Linear):
     def __init__(self,
@@ -110,10 +112,24 @@ class FPMinMaxQuantLinear(nn.Linear):
         else:
             return w_sim,None
     
+    def quant_weight_nvfp4(self):
+        w_sim = fake_quant_fp4(x=self.weight, 
+                               stochastic_rounding=False, 
+                               block_size=int(os.getenv('BLOCK_SIZE')), 
+                               scale_format=os.getenv('SCALE_FORMAT'))
+        return w_sim
+    
     def quant_input(self, x):
         a, a_scale = self.get_log_scale( x ,act_or_weight = 0)
         x_sim=(a/a_scale).round_()
         x_sim.mul_(a_scale)
+        return x_sim
+    
+    def quant_input_nvfp4(self, x):
+        x_sim = fake_quant_fp4(x=x, 
+                               stochastic_rounding=False, 
+                               block_size=int(os.getenv('BLOCK_SIZE')), 
+                               scale_format=os.getenv('SCALE_FORMAT'))
         return x_sim
     
     def quant_forward(self,x):
