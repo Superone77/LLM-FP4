@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from utils.models import MatMul
 import re
 
+
 def wrap_modules_in_net(net,cfg):
     wrapped_modules={}
     module_dict={}
@@ -43,10 +44,16 @@ def wrap_modules_in_net(net,cfg):
                 setattr(father_module,name[idx:],replace_m)
             else:
                 new_m = cfg.get_module(module_types[name[idx+1:]],m.in_features,m.out_features)
-                new_m.weight.data=m.weight.data
-                new_m.bias=m.bias
-                replace_m=new_m
-                wrapped_modules[name] = new_m
+                print(m.weight.data.dtype)
+                print(m.weight.data.device)
+                print(new_m.weight.data.dtype)
+                print(new_m.weight.data.device)
+                # new_m.weight.data.to(dtype=m.weight.data.dtype, device=m.weight.data.device)
+                if new_m.weight.data.device != "meta":
+                    new_m.weight.data=m.weight.data
+                    new_m.bias=m.bias
+                    replace_m=new_m
+                    wrapped_modules[name] = new_m
                 setattr(father_module,name[idx+1:],replace_m)
         elif isinstance(m,MatMul):
             # print(f'name: {name[idx+1:]}')

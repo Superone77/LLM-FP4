@@ -101,7 +101,9 @@ class FPMinMaxQuantLinear(nn.Linear):
             raise NotImplementedError
         return out
     
-    def quant_weight_bias(self):
+    def quant_weight_bias(self, quant_scheme = 'llm.fp4'):
+        assert quant_scheme in ['llm.fp4','nvfp4_naive','mxfp4_naive']
+        # if quant_scheme == 'llm.fp4':
         w, w_scale = self.get_log_scale( self.weight ,act_or_weight = 1)
         w=(w/w_scale).round_()
         w_sim=w.mul_(w_scale)
@@ -115,6 +117,7 @@ class FPMinMaxQuantLinear(nn.Linear):
         x_sim=(a/a_scale).round_()
         x_sim.mul_(a_scale)
         return x_sim
+
     
     def quant_forward(self,x):
         assert self.calibrated is not None,f"You should run calibrate_forward before run quant_forward for {self}"

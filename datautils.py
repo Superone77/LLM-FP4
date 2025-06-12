@@ -98,12 +98,15 @@ def get_ptb(nsamples, seed, seqlen, model):
 
 def get_c4(nsamples, seed, seqlen, model):
     from datasets import load_dataset
-    traindata = load_dataset(
-        'allenai/c4', 'allenai--c4', data_files={'train': 'en/c4-train.00000-of-01024.json.gz'}, split='train'
-    )
-    valdata = load_dataset(
-        'allenai/c4', 'allenai--c4', data_files={'validation': 'en/c4-validation.00000-of-00008.json.gz'}, split='validation'
-    )
+    traindata = load_dataset("allenai/c4", "en", split="train[:1%]", cache_dir = "./c4_cache")
+    # traindata = load_dataset(
+    #     'json', data_files='/local/mnt/workspace/wanqi/tmp/data/c4/en/c4-train.00000-of-01024.json.gz'
+    # )
+    valdata = load_dataset("allenai/c4", "en", split="validation", cache_dir = "./c4_cache")
+
+    # valdata = load_dataset(
+    #     'json', data_files='/local/mnt/workspace/wanqi/tmp/data/c4/en/c4-validation.00000-of-00008.json.gz'
+    # )
 
     from transformers import AutoTokenizer
     tokenizer = AutoTokenizer.from_pretrained(model, use_fast=True)

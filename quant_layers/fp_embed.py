@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
 import math
+from utils import fake_quant_fp4
 
 class FPMinMaxQuantEmbedding(nn.Embedding):
     def __init__(self,
@@ -98,6 +99,53 @@ class FPMinMaxQuantEmbedding(nn.Embedding):
         # step2: search for the best bias for w and a of each layer
         maxval = self.weight.data.abs().max()
         self.interval = 2**self.exponent_bit - torch.log2(maxval) + math.log2(2 - 2 ** (-self.mantissa_bit)) - 1
+        self.calibrated=True
+
+class FPMinMaxBlockQuantEmbedding_FixedFormat(nn.Embedding):
+    def __init__(self,
+        num_embeddings: int,
+        embedding_dim: int,
+        padding_idx: int,
+        format:str='fp4_e2m1',
+        block_size:int=32, 
+        stochastic_rounding:bool=False,
+        mode = "raw"):
+        super().__init__(num_embeddings,embedding_dim, padding_idx)
+        self.n_calibration_step=2
+        self.mode = mode
+        self.format = format
+        self.block_size = block_size
+        self.stochastic_rounding = stochastic_rounding
+
+
+    def forward(self, x):
+        if self.mode=='raw':
+            out=F.embedding(x, self.weight)
+        elif self.mode=="quant_forward":
+            out=self.quant_forward(x)
+        elif self.mode=="calibration_step1":
+            print("embedding calibraion doesn't require step 1")
+        elif self.mode=="calibration_step2":
+            self.calibration_step2()
+        else:
+            raise NotImplementedError
+        return out
+    
+    def quant_embed(self):
+        w_sim = fake_quant_fp4(self.weight, 
+                            stochastic_rounding = self.stochastic_rounding,
+                            format = self.format,
+                            block_size=self.block_size)
+        return w_sim
+    
+    def quant_forward(self,x):
+        assert self.calibrated is not None,f"You should run calibrate_forward before run quant_forward for {self}"
+        embed_sim =self.quant_embed()
+        out=F.embedding(x, embed_sim)
+        return out
+
+    def calibration_step2(self):
+        # step2: search for the best bias for w and a of each layer
         self.calibrated=True
 
 class FPPTQSLQuantEmbedding(FPMinMaxQuantEmbedding):
