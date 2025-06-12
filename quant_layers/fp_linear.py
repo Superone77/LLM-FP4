@@ -125,7 +125,7 @@ class FPMinMaxQuantLinear(nn.Linear):
         x_sim.mul_(a_scale)
         return x_sim
     
-    def quant_input_nvfp4(self, x):
+    def quant_input_fp4(self, x):
         x_sim = fake_quant_fp4(x=x, 
                                stochastic_rounding=False, 
                                block_size=int(os.getenv('BLOCK_SIZE')), 
