@@ -92,8 +92,8 @@ def fake_quant_fp4(x:torch.Tensor,
                    stochastic_rounding:bool=False, 
                    dim:int=-1, 
                    format:str='fp4_e2m1',
-                   block_size:int=32, 
-                   scale_format:str='e8m0',
+                   block_size:int=16, 
+                   scale_format:str='e4m3',
                    grid:bool=False) -> torch.Tensor:
     # TODO:
     # 1) enable dim
@@ -180,6 +180,8 @@ def update_scale(x: torch.Tensor,
 
     scale = torch.where((0 < scale) * (scale < torch.inf), scale, 1.0)
     return scale
+
+
     
 
 if __name__ == '__main__':

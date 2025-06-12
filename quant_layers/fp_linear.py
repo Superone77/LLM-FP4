@@ -4,6 +4,77 @@ import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
 import math
+from .utils import fake_quant_fp4
+from .fp4 import update_scale_nvfp4, quant_nvfp4
+
+class FPMinMaxBlockQuantLinear_FixedFormat(nn.Linear):
+    def __init__(self,
+        in_features: int,
+        out_features: int,
+        bias: bool = True,
+        format:str='fp4_e2m1',
+        block_size:int=32, 
+        stochastic_rounding:bool=False,
+        mode = "raw"):
+        super().__init__(in_features,out_features,bias)
+        self.n_calibration_step=2
+        self.mode = mode
+        self.format = format
+        self.block_size = block_size
+        self.stochastic_rounding = stochastic_rounding
+        self.scale_per_t_a = None
+        self.scale_per_b_a = None
+        self.scale_per_t_w = None
+        self.scale_per_b_w = None
+        self.calibrated = False
+
+    def forward(self, x):
+        if self.mode=='raw':
+            out=F.embedding(x, self.weight)
+        elif self.mode=="quant_forward":
+            out=self.quant_forward(x)
+        elif self.mode=="calibration_step1":
+            print("embedding calibraion doesn't require step 1")
+        elif self.mode=="calibration_step2":
+            self.calibration_step2()
+        else:
+            raise NotImplementedError
+        return out
+    
+    def quant_weight_bias(self):
+        w_sim = quant_nvfp4(self.weight, self.stochastic_rounding, self.scale_per_t_w, self.scale_per_b_w)
+        
+        if self.bias is not None:
+            return w_sim,self.bias
+        else:
+            return w_sim,None
+
+
+    def quant_input(self, x):
+        out = quant_nvfp4(x, self.stochastic_rounding, self.scale_per_t_a, self.scale_per_b_a)
+        return out
+        
+
+    def quant_forward(self,x):
+        assert self.calibrated is not None,f"You should run calibrate_forward before run quant_forward for {self}"
+        w_sim,bias_sim=self.quant_weight_bias()
+        x_sim=self.quant_input(x)
+        out=F.linear(x_sim, w_sim, bias_sim)
+        return out
+
+    def calibration_step2(self,x):
+        # step2: search for the best bias for w and a of each layer
+        if self.calibrated == False:
+            w_sim, self.scale_per_t_w, self.scale_per_b_w = update_scale_nvfp4(self.weight,self.stochastic_rounding, self.scale_per_t_w, self.scale_per_b_w)
+            self.calibrated = True
+            bias_sim = self.bias
+        else:
+            w_sim,bias_sim=self.quant_weight_bias()
+        x_sim, self.scale_per_t_a, self.scale_per_b_a = update_scale_nvfp4(x,self.stochastic_rounding, self.scale_per_t_a, self.scale_per_b_a)
+        out=F.linear(x_sim, w_sim, self.bias)
+        return out
+
+
 
 class FPMinMaxQuantLinear(nn.Linear):
     def __init__(self,
