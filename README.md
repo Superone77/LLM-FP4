@@ -62,6 +62,14 @@ python main.py --model hf-causal-experimental --model_args pretrained=$MODEL_ADD
 --ptq_param_path "./search_result/FPQ_config_llama/W4A4E4_search_round3_search_intervals(0.01,1.2,100).pt"
 ```
 
+To evaluate on the MMLU, GSM8K and MATH500 benchmarks:
+
+```bash
+python main.py --model hf-causal-experimental --model_args pretrained=$MODEL_ADDR,use_accelerate=True \
+--tasks mmlu,gsm8k,math500 --device cuda --batch_size auto --only_eval \
+--ptq_param_path <path_to_quant_params>
+```
+
 ## PTQ Result
 Below is the results in LLaMA-7B and LLaMA-13B with six commonsense reasoning datasets.
 
