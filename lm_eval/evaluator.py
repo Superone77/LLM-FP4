@@ -108,7 +108,8 @@ def calibrate_evaluate(
     if check_integrity:
         run_task_tests(task_list=tasks)
 
-    flag_PESB = True
+    flag_PESB = False
+    flag_Naive = True
 
     print(f"model device map: {lm.model.hf_device_map}")
     
@@ -148,6 +149,49 @@ def calibrate_evaluate(
             quant_calibrator.save_qparams(config_name, save_name = f"W{bit_settings[0][0]}A{bit_settings[0][1]}E{bit_settings[0][2]}_search_round{search_round}_search_intervals({search_intervals_[0][0]},{search_intervals_[0][1]},{search_intervals_[0][2]})" )
         except:
             quant_calibrator.save_qparams(config_name, save_name = "test" )
+
+
+        print(f"Finish Calibration")
+    
+    if flag_Naive:
+        ## add calibration here
+        import time
+        import utils.net_wrap as net_wrap
+        from torch.utils.data import DataLoader
+        from utils.quant_calib import FloatingPointQuantCalibrator, FixedFormatFloatingPointQuantCalibrator
+        from datautils import get_loaders, init_config, cfg_modifier
+        from types import MethodType
+        from utils.models import MatMul, attention_forward
+        from transformers.models.llama.modeling_llama import LlamaAttention
+
+        print(f"calib_size {calib_size}")
+        calib_data, eval_data = get_loaders('c4', calib_size, 0, 2048, 'huggyllama/llama-7b')
+        num = calib_size
+        calib_dataloader = DataLoader(calib_data, batch_size=num, shuffle=False)
+
+        metrics = ["L2_norm"]
+        
+        bit_settings = [qbits] # weight, activation,embedding, w_exponent_bit, a_exponent_bit, embedding_exponent_bit
+        search_intervals_ = [search_intervals]
+        cfg_modifier = cfg_modifier(metric=metrics[0], bit_setting=bit_settings[0], search_round=search_round, search_intervals=search_intervals_[0])
+
+        config_name = quant_config
+        quant_cfg = init_config(config_name)
+        quant_cfg = cfg_modifier(quant_cfg)
+       
+        wrapped_modules=net_wrap.wrap_modules_in_net(lm.model, quant_cfg)
+        print(lm.model)
+
+        ## test saving here
+        quant_calibrator = FixedFormatFloatingPointQuantCalibrator(lm.model,wrapped_modules,calib_dataloader,sequential=True,batch_size=1)
+        import os
+        quant_mode = os.environ['QUANT_MODE']
+        if quant_mode != "Raw":
+            quant_calibrator.quant_calib()
+        # try:
+        #     quant_calibrator.save_qparams(config_name, save_name = f"W{bit_settings[0][0]}A{bit_settings[0][1]}E{bit_settings[0][2]}_search_round{search_round}_search_intervals({search_intervals_[0][0]},{search_intervals_[0][1]},{search_intervals_[0][2]})" )
+        # except:
+        #     quant_calibrator.save_qparams(config_name, save_name = "test" )
 
 
         print(f"Finish Calibration")

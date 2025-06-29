@@ -1,7 +1,7 @@
 from numpy import isin
 import torch
-from quant_layers.fp_linear import FPMinMaxQuantLinear
-from quant_layers.fp_embed import FPMinMaxQuantEmbedding
+from quant_layers.fp_linear import FPMinMaxQuantLinear,FPMinMaxBlockQuantLinear_FixedFormat
+from quant_layers.fp_embed import FPMinMaxQuantEmbedding,FPMinMaxBlockQuantEmbedding_FixedFormat
 import torch.nn.functional as F
 from tqdm import tqdm
 import os
@@ -61,16 +61,16 @@ class QuantCalibrator():
         """
         # calibration step1: collect raw data
         print(f"Start calibration step=1")
-        for name,module in self.wrapped_modules.items():
-            # corner cases for calibrated modules
-            if hasattr(module, "calibrated"):
-                module.mode = "raw"
-            else:
-                module.mode=f'calibration_step1'
-        with torch.no_grad():
-            for inp,target in self.calib_loader:
-                inp=inp.cuda()
-                self.net(inp)
+        # for name,module in self.wrapped_modules.items():
+        #     # corner cases for calibrated modules
+        #     if hasattr(module, "calibrated"):
+        #         module.mode = "raw"
+        #     else:
+        #         module.mode=f'calibration_step1'
+        # with torch.no_grad():
+        #     for inp,target in self.calib_loader:
+        #         inp=inp.cuda()
+        #         self.net(inp)
         # calibration step2: each module run calibration with collected raw data
         for name,module in self.wrapped_modules.items():
             if hasattr(module, "calibrated"):
@@ -342,3 +342,79 @@ class FloatingPointQuantInitialization(QuantCalibrator):
 
         print("L2_norm calibration finished")
 
+
+class FixedFormatFloatingPointQuantCalibrator(QuantCalibrator):
+    """
+    MSE metric needs layer outputs to weigh the loss, both sequentially
+    and parallelly.
+    """
+    def __init__(self, net, wrapped_modules, calib_loader, sequential=False, batch_size=1):
+        super().__init__(net, wrapped_modules, calib_loader, sequential=sequential)
+        self.batch_size = batch_size
+
+    def sequential_quant_calib(self):
+        """
+        A quick implementation of calibration.
+        Assume calibration dataset could be fed at once.
+        """
+        quant_mode = os.environ['QUANT_MODE']
+        print("quant_mode:", quant_mode)
+        if quant_mode == "Dynamic_Block" or quant_mode == "Dynamic_Double":
+            dynamic = True
+        else:
+            dynamic = False
+        # run calibration
+        n_calibration_steps=2
+        for step in range(n_calibration_steps):
+            if step == 0:
+                continue
+            print(f"Start calibration step={step+1}")
+            for name,module in self.wrapped_modules.items():
+                print("calibrated:", name)
+                # corner cases for calibrated modules
+                if not dynamic:
+                    if hasattr(module, "calibrated"):
+                        if step == 0:
+                            module.mode = "raw"
+                        elif step == 1:
+                            module.mode = "calibration_step2"
+                    else:
+                        module.mode=f'calibration_step{step+1}'
+                    with torch.no_grad():
+                        data_num = 0
+                        for inp,target in self.calib_loader:
+                            data_num = data_num+1
+                            print(inp[0])
+                            inp=inp.cuda()
+                            self.net(inp[0])
+                        print("calibrated on data:", data_num)
+                if isinstance(module, FPMinMaxBlockQuantLinear_FixedFormat):
+                    print("quantization parameter of ",name)
+                    print(module.scale_per_b_a)
+                    print(module.scale_per_b_w)
+                    print(module.scale_per_t_a)
+                    print(module.scale_per_t_w)
+                print("change to quantized:", name)
+                module.mode = "quant_forward"
+                # if name == "model.layers.0.self_attn.o_proj":
+                #     break
+            
+        
+        # finish calibration
+        # for name,module in self.wrapped_modules.items():
+        #     module.mode='quant_forward'
+        torch.cuda.empty_cache() # memory footprint cleanup
+        print("sequential calibration finished")
+
+    def quant_calib(self):
+        calib_layers=[]
+        for name,module in self.wrapped_modules.items():
+            calib_layers.append(name)
+        print(f"prepare parallel calibration for {calib_layers}")
+        if self.sequential:
+            self.sequential_quant_calib()
+        else:
+            self.parallel_quant_calib()
+        self.calibrated = True
+
+    

@@ -6,8 +6,8 @@ class Math500(Task):
     """Subset of mathematics problems with 500 evaluation questions."""
 
     VERSION = 0
-    DATASET_PATH = "math500"
-    DATASET_NAME = "main"
+    DATASET_PATH = "HuggingFaceH4/MATH-500"
+    DATASET_NAME = "default"
 
     def has_training_docs(self):
         return False
